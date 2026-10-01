@@ -1,6 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "comment": "La carpeta api/ del codigo cliente (api/hotel.ts, api/lifebook.ts, ...) colisiona con la convencion RESERVADA de Vercel: cada fichero de api/ se convertiria en una Serverless Function (mas de 12 -> Build Failed en Hobby). Declarar builds a mano DESACTIVA esa autodeteccion: solo corre el export web estatico, cero funciones.",
   "builds": [
     {
       "src": "package.json",

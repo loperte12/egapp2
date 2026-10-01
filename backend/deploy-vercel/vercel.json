@@ -1,33 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "comment": "Migración desde Alibaba Cloud. El prefijo de la API debe reproducir EXACTAMENTE la cadena que el APK ya compilado llama (api/config.ts: API_BASE = https://hk.egrouteplan.com/wallet/api/v1) para no recompilar ni republicar la app.",
   "functions": {
     "api/index.ts": {
-      "comment": "Pro (20 USD/mes) permite 60 s; Hobby corta a 10 s y puede quedarse corto en cobros y reservas con varias queries en transacción.",
       "maxDuration": 60,
       "memory": 1024
     }
   },
   "rewrites": [
-    {
-      "comment": "Toda la API de NestJS entra por la función serverless única (cold start amortizado por instancia).",
-      "source": "/wallet/api/v1/:path*",
-      "destination": "/api/index"
-    },
-    {
-      "comment": "OSRM vive en la VM Oracle Always Free (ARM). El dominio no cambia para la app: el rewrite hace de proxy transparente. Sustituir OSRM_ORACLE_HOST por la IP de la VM.",
-      "source": "/routing/:path*",
-      "destination": "http://OSRM_ORACLE_HOST:5000/:path*"
-    },
-    {
-      "comment": "Tiles y estilos del mapa: si pesan menos del límite del deployment (250 MB descomprimido) van como estáticos en public/maps/. Si no, mover a R2 y reescribir aquí a su URL pública.",
-      "source": "/maps/:path*",
-      "destination": "/public/maps/:path*"
-    }
+    { "source": "/wallet/api/v1/:path*", "destination": "/api/index" },
+    { "source": "/routing/:path*", "destination": "http://OSRM_ORACLE_HOST:5000/:path*" },
+    { "source": "/maps/:path*", "destination": "/public/maps/:path*" }
   ],
   "crons": [
     {
-      "comment": "Sustituye al @Cron('*/15 * * * *') de reservations.service (893). Vercel Cron llama con GET; se necesita la ruta interna protegida por CRON_SECRET (ver acta, §4).",
       "path": "/wallet/api/v1/internal/expire-stale",
       "schedule": "*/15 * * * *"
     }
