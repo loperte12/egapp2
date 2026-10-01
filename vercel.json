@@ -8,6 +8,9 @@
     }
   ],
   "routes": [
+    { "src": "/wallet/api/(.*)", "dest": "https://hk.egrouteplan.com/wallet/api/$1" },
+    { "src": "/maps/(.*)", "dest": "https://hk.egrouteplan.com/maps/$1" },
+    { "src": "/routing/(.*)", "dest": "https://hk.egrouteplan.com/routing/$1" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]

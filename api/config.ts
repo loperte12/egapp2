@@ -8,7 +8,14 @@
 // ⚠️ ESPEJO HONG KONG activo (8.218.88.237 / hk.egrouteplan.com) mientras el
 // servidor de Shanghai (egrouteplan.com) no sea accesible desde la red China
 // (falta ICP 备案 en Alibaba). Los tiles/mapas siguen en Shanghai (WebView).
-export const API_HOST = 'https://hk.egrouteplan.com';
+//
+// WEB (Vercel): el host va VACÍO a propósito — las llamadas son RELATIVAS y Vercel las
+// proxeea al backend (vercel.json). Motivo: el navegador impone CORS y el backend no
+// manda Access-Control-Allow-Origin; con el mismo origen, el CORS desaparece sin tocar
+// el servidor. En nativo (APK) no hay CORS: el host absoluto de siempre.
+import { Platform } from 'react-native';
+
+export const API_HOST = Platform.OS === 'web' ? '' : 'https://hk.egrouteplan.com';
 
 // --- Backend NestJS (wallet + mobility auth + KYC) ---
 export const API_BASE = `${API_HOST}/wallet/api/v1`;

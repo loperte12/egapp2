@@ -12,10 +12,13 @@
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
   /**
-   * `backend/server-src` y `backend/server-patch` son COPIAS/borradores de los ficheros del
-   * servidor (NestJS) que se bajan aquí para poder leerlos y anclarlos con precisión en los
-   * parches. No forman parte de la app: si se incluyen, el chequeo de tipos de la app se llena
-   * de errores de `@nestjs/*` y decoradores.
+   * `backend/` es MATERIAL DEL SERVIDOR, no de la app: `server-src` y `server-patch` son
+   * COPIAS/borradores de los ficheros del servidor (NestJS) que se bajan aquí para poder leerlos
+   * y anclarlos con precisión en los parches; `deploy-vercel` es el scaffolding del wrapper
+   * serverless que se copiará al proyecto real del servidor (depende de `@nestjs/*` y de rutas
+   * `../src/*` que no existen en la app). Si se incluyeran, el chequeo de tipos de la app se
+   * llenaría de errores ajenos. Se excluye la carpeta ENTERA para no ampliar la lista en cada
+   * tanda (01/10: `deploy-vercel` coló sin estar en la lista y tsc volvió a ensuciarse).
    *
    * Los `_respaldo-*` son los respaldos que escribe cada codemod antes de tocar un fichero. Son
    * COPIAS con la misma extension que el original, asi que el `include` de arriba las recogia y el
@@ -29,5 +32,5 @@
    * que se olvida. (Sin comodines en este texto a proposito: el cierre de bloque que llevan
    * dentro cerraria el comentario y rompe el JSON.)
    */
-  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js", "backend/server-src", "backend/server-patch", "_respaldo-*"]
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js", "backend", "_respaldo-*"]
 }
