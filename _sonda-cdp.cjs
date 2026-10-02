@@ -1,5 +1,5 @@
 // Sonda CDP mínima: abre una pestaña, navega, recoge consola/errores y mide el render.
-// Uso: node _sonda-cdp.cjs <url> [segundos] [puertoCDP]
+// Uso: node _sonda-cdp.cjs <url> [segundos]
 const http = require('http');
 
 const url = process.argv[2] || 'http://localhost:4173';
