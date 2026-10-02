@@ -11,26 +11,5 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  /**
-   * `backend/` es MATERIAL DEL SERVIDOR, no de la app: `server-src` y `server-patch` son
-   * COPIAS/borradores de los ficheros del servidor (NestJS) que se bajan aquí para poder leerlos
-   * y anclarlos con precisión en los parches; `deploy-vercel` es el scaffolding del wrapper
-   * serverless que se copiará al proyecto real del servidor (depende de `@nestjs/*` y de rutas
-   * `../src/*` que no existen en la app). Si se incluyeran, el chequeo de tipos de la app se
-   * llenaría de errores ajenos. Se excluye la carpeta ENTERA para no ampliar la lista en cada
-   * tanda (01/10: `deploy-vercel` coló sin estar en la lista y tsc volvió a ensuciarse).
-   *
-   * Los `_respaldo-*` son los respaldos que escribe cada codemod antes de tocar un fichero. Son
-   * COPIAS con la misma extension que el original, asi que el `include` de arriba las recogia y el
-   * chequeo se llenaba de errores de modulos que no existen desde esa carpeta (`../api/billing`).
-   * Medido con el primero (31 errores que no eran de la app) y vuelto a medir el 25/09 con
-   * `_respaldo-peso-p1`: los mismos 21+ errores, todos del respaldo y ninguno del codigo.
-   *
-   * SE EXCLUYE POR PATRON, NO POR NOMBRE. La primera version excluia solo `_respaldo-espaciado`,
-   * escrito a mano: el respaldo siguiente —de otra tanda— volvio a colarse y hubo que volver a
-   * diagnosticarlo. Un `exclude` que hay que ampliar en cada tanda no es una defensa, es una lista
-   * que se olvida. (Sin comodines en este texto a proposito: el cierre de bloque que llevan
-   * dentro cerraria el comentario y rompe el JSON.)
-   */
-  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js", "backend", "_respaldo-*"]
+  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "jest.config.js", "backend", "_respaldo-*", "_dump"]
 }

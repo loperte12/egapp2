@@ -30,6 +30,11 @@
  *
  * La URL resultante es `https://…/lifebook-media/products/<usuario>/<uuid>.jpg`, que es
  * exactamente lo que el servidor del hotel espera.
+ *
+ * 02/10/2026 — MODO DUAL MinIO/R2: el backend con Cloudflare R2 firma un **PUT directo**
+ * (R2 no implementa el S3 POST Object API) y devuelve `method:'PUT'` + `headers`. Este
+ * cliente decide por `method`: POST multipart contra MinIO, PUT en bruto contra R2 con el
+ * Content-Type EXACTO que firmó el servidor (otro tipo = 403 SignatureDoesNotMatch).
  */
 import { getInfoAsync } from 'expo-file-system';
 import { API_BASE } from './config';
@@ -49,7 +54,7 @@ export interface SignUploadInput {
 
 export interface SignUploadResult {
   uploadUrl: string;
-  /** Campos que hay que reenviar TAL CUAL en el multipart. */
+  /** Campos que hay que reenviar TAL CUAL en el multipart (modo POST). */
   fields: Record<string, string>;
   key: string;
   bucket: string;
@@ -57,8 +62,10 @@ export interface SignUploadResult {
   publicUrl: string | null;
   maxBytes: number;
   maxSec: number | null;
-  /** Cómo subir: POST multipart con `fields` + el archivo. */
-  method: 'POST';
+  /** Cómo subir: POST multipart (MinIO) o PUT directo con `headers` (R2). */
+  method: 'POST' | 'PUT';
+  /** Cabeceras obligatorias en modo PUT (el Content-Type va FIRMADO: enviarlo igual o hay 403). */
+  headers?: Record<string, string>;
   /** Nombre del campo del archivo (hoy siempre `file`). */
   fileField: string;
   expiresIn: number;
@@ -134,17 +141,32 @@ export async function uploadImageReal(local: {
       `La foto pesa ${(size / MB).toFixed(1)} MB y el máximo es ${Math.round(Number(firma.maxBytes) / MB)} MB`);
   }
 
-  // 2) Subida al almacenamiento. Los campos firmados primero y el ARCHIVO AL FINAL:
-  //    el almacenamiento rechaza la subida si el campo del archivo no es el último.
-  const form = new FormData();
-  for (const [k, v] of Object.entries(firma.fields ?? {})) form.append(k, String(v));
-  form.append(firma.fileField || 'file', {
-    uri: local.uri,
-    name: local.fileName || `habitacion-${Date.now()}.jpg`,
-    type: mime,
-  } as unknown as Blob);
-
-  const res = await fetch(firma.uploadUrl, { method: 'POST', body: form });
+  // 2) Subida. DOS MODOS, según lo que firmó el servidor:
+  //    - POST multipart (MinIO): campos firmados primero y el ARCHIVO AL FINAL —
+  //      el almacenamiento rechaza la subida si el campo del archivo no es el último.
+  //    - PUT directo (R2): el body es el archivo en bruto con el Content-Type
+  //      EXACTO que firmó el servidor (otro tipo = 403 SignatureDoesNotMatch).
+  let res: Response;
+  if (firma.method === 'PUT') {
+    const crudo = await (await fetch(local.uri)).blob();
+    // El Blob del runtime puede traer otro Content-Type implícito: se reconstruye
+    // con el mime exacto firmado para no romper la firma.
+    const archivo = crudo.type === mime ? crudo : new Blob([crudo], { type: mime });
+    res = await fetch(firma.uploadUrl, {
+      method: 'PUT',
+      headers: firma.headers ?? { 'Content-Type': mime },
+      body: archivo,
+    });
+  } else {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(firma.fields ?? {})) form.append(k, String(v));
+    form.append(firma.fileField || 'file', {
+      uri: local.uri,
+      name: local.fileName || `habitacion-${Date.now()}.jpg`,
+      type: mime,
+    } as unknown as Blob);
+    res = await fetch(firma.uploadUrl, { method: 'POST', body: form });
+  }
   if (!res.ok) {
     const cuerpo = await res.text().catch(() => '');
     // El almacenamiento responde XML con el motivo (<Code>EntityTooLarge</Code>…).

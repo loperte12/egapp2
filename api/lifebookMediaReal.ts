@@ -8,19 +8,23 @@
  *   GET    /lifebook/commerce/media/quota        → cuota de 24 h y material pendiente
  *   DELETE /lifebook/commerce/media?key=…        → borra una subida propia
  *
- * ── POR QUÉ EXISTE ESTE CAMINO ────────────────────────────────────────────────
+ * ── POR QUÉ EXISTE ESTE CAMINO ──────────────────────────────────────────────────────────
  * El endpoint viejo (`POST /lifebook/media/upload`, multipart contra el API) hace que
  * el archivo pase por Node: la petición entra por nginx, se copia en memoria/temporal y
  * desde ahí va a MinIO. Con un vídeo de 50 minutos eso son ~900 MB atravesando el proceso
  * del API… y sin forma de saber por dónde va (ni de reanudar). Aquí el archivo va **directo
  * del móvil al almacenamiento** con una URL firmada, y el API solo firma y luego verifica.
  *
- * ── LO QUE ESTE MÓDULO **NO** HACE (a propósito) ──────────────────────────────
+ * ── LO QUE ESTE MÓDULO **NO** HACE (a propósito) ──────────────────────────
  *   · No decide topes: los devuelve el servidor (`maxBytes` / `maxSec`) y además los
  *     impone MinIO en la política de la URL firmada. Aquí solo se avisa antes.
  *   · No confía en lo que declara el cliente: `complete` re-lee el archivo con ffprobe y
  *     responde la duración/tamaño reales. Si el archivo no está donde se dijo, falla.
  *   · No manda el token JWT a MinIO: la URL firmada es autosuficiente.
+ *
+ * 02/10/2026 — MODO DUAL MinIO/R2: el backend con Cloudflare R2 firma un **PUT directo**
+ * y devuelve `method:'PUT'` + `headers`. En PUT el body es el archivo EN BRUTO (no
+ * multipart) con el Content-Type EXACTO firmado; XHR conserva `upload.onprogress`.
  */
 import { http, httpRequest } from './httpClient';
 import { mimeToExt } from '../constants/lifebook';
@@ -32,9 +36,9 @@ export type LbDurationKind = 'short' | 'long';
 
 /** Billete de subida tal cual lo devuelve `upload-url`. */
 export interface LbTicketSubida {
-  /** URL del POST firmado (MinIO, directo desde el móvil). */
+  /** URL firmada (POST multipart en MinIO; PUT directo en R2). */
   uploadUrl: string;
-  /** Campos del formulario que hay que enviar TAL CUAL, antes del archivo. */
+  /** Campos del formulario que hay que enviar TAL CUAL, antes del archivo (modo POST). */
   fields: Record<string, string>;
   /** Clave del objeto reservada ya en la base (sirve para cerrar y para borrar). */
   key: string;
@@ -48,7 +52,10 @@ export interface LbTicketSubida {
   maxSec: number | null;
   durationKind: LbDurationKind;
   expiresIn: number;
-  method: 'POST';
+  /** POST multipart (MinIO) o PUT directo (R2). */
+  method: 'POST' | 'PUT';
+  /** Cabeceras obligatorias en modo PUT (Content-Type firmado: igual o 403). */
+  headers?: Record<string, string>;
   fileField: string;
   restantesHoy: number;
 }
@@ -177,8 +184,12 @@ export async function subirArchivoFirmado(
   return lifebookMediaRealApi.cerrar(billete.key, opts.durationSec);
 }
 
-/** El POST multipart contra la URL firmada, con `upload.onprogress`. */
-function enviarAlAlmacen(
+/** Subida a la URL firmada con `upload.onprogress`. DOS MODOS:
+ *  - POST multipart (MinIO): campos firmados primero, el ARCHIVO AL FINAL.
+ *  - PUT directo (R2): el body es el archivo en bruto con el Content-Type EXACTO
+ *    que firmó el servidor (otro tipo = 403 SignatureDoesNotMatch). XHR permite
+ *    enviar un Blob como body y conserva `upload.onprogress` para el progreso. */
+async function enviarAlAlmacen(
   billete: LbTicketSubida,
   archivo: { uri: string; name: string; mimeType: string },
   totalDeclarado: number,
@@ -186,23 +197,40 @@ function enviarAlAlmacen(
   onProgreso?: (p: LbProgreso) => void,
   timeoutMs = 0,
 ): Promise<void> {
+  // En modo PUT se prepara ANTES el Blob del archivo (el mime exacto firmado):
+  // el Blob del runtime puede traer otro Content-Type implícito.
+  const blobPut =
+    (billete.method || 'POST') === 'PUT'
+      ? new Blob([await (await fetch(archivo.uri)).blob()], { type: archivo.mimeType })
+      : null;
+
   return new Promise<void>((resolve, reject) => {
-    const form = new FormData();
-    // 1) Todos los campos de la política, en el orden que los devolvió el servidor.
-    Object.entries(billete.fields).forEach(([k, v]) => form.append(k, String(v)));
-    // 2) El archivo, SIEMPRE el último.
-    form.append(billete.fileField || 'file', {
-      uri: archivo.uri,
-      name: archivo.name || `subida.${mimeToExt(archivo.mimeType)}`,
-      type: archivo.mimeType,
-    } as unknown as Blob);
-    // 3) El Content-Type del formulario lo pone el runtime con su boundary: si se fija a
-    //    mano (como en el camino multipart del API) la política `eq $Content-Type` de
-    //    MinIO compara contra el VALOR del campo, no contra la cabecera.
+    const esPut = blobPut !== null;
+    let form: FormData | null = null;
+    if (!esPut) {
+      form = new FormData();
+      // 1) Todos los campos de la política, en el orden que los devolvió el servidor.
+      Object.entries(billete.fields).forEach(([k, v]) => form!.append(k, String(v)));
+      // 2) El archivo, SIEMPRE el último.
+      form.append(billete.fileField || 'file', {
+        uri: archivo.uri,
+        name: archivo.name || `subida.${mimeToExt(archivo.mimeType)}`,
+        type: archivo.mimeType,
+      } as unknown as Blob);
+      // 3) El Content-Type del formulario lo pone el runtime con su boundary: si se fija a
+      //    mano (como en el camino multipart del API) la política `eq $Content-Type` de
+      //    MinIO compara contra el VALOR del campo, no contra la cabecera.
+    }
 
     const xhr = new XMLHttpRequest();
     xhr.open(billete.method || 'POST', billete.uploadUrl, true);
     if (timeoutMs > 0) xhr.timeout = timeoutMs;
+    if (esPut) {
+      // En PUT las cabeceras van firmadas: se envían TAL CUAL las manda el servidor.
+      Object.entries(billete.headers ?? { 'Content-Type': archivo.mimeType }).forEach(([k, v]) =>
+        xhr.setRequestHeader(k, v),
+      );
+    }
 
     xhr.upload.onprogress = (e: ProgressEvent) => {
       if (!onProgreso) return;
@@ -228,12 +256,13 @@ function enviarAlAlmacen(
           : `La subida falló (HTTP ${xhr.status}). ${cuerpo}`.trim(),
       ));
     };
+
     xhr.onerror = () => reject(new Error('Se cortó la conexión durante la subida. Comprueba tu red y vuelve a intentarlo.'));
     xhr.ontimeout = () => reject(new Error('La subida tardó demasiado y se canceló. Prueba con una red más rápida.'));
     xhr.onabort = () => reject(new Error('Subida cancelada.'));
 
     try {
-      xhr.send(form as unknown as Document);
+      xhr.send((esPut ? blobPut : form) as unknown as Document);
     } catch (e) {
       reject(e instanceof Error ? e : new Error('No se pudo iniciar la subida.'));
     }
