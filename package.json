@@ -14,7 +14,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "postinstall": "node scripts/parcha-import-meta.cjs"
   },
   "dependencies": {
     "@egrouteplan/contracts": "file:packages/contracts",
@@ -62,7 +63,7 @@
     "react-native-web": "^0.20.0",
     "react-native-webview": "13.13.5",
     "zod": "^4.5.4",
-    "zustand": "^5.0.15"
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",

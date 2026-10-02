@@ -72,3 +72,4 @@ egrouteplan-app/
 # OJO: igual que `.auditoria-servicios/`, ignorarlos NO los borra — siguen en el disco.
 # ---------------------------------------------------------------------------
 _respaldo-*/
+dist-*/

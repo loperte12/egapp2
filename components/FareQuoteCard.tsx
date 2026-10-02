@@ -37,6 +37,11 @@ export default function FareQuoteCard({ distanceKm = 3.5, city = 'Malabo' }: { d
     );
   }
   if (!quote) return null;
+  // Guardarraíl (02/10): httpClient devuelve {} cuando el API responde algo que no
+  // es JSON (página de error, proxy caído) y el GET "triunfa". Sin breakdown/band
+  // la lectura de baseFare tiraba la app entera al error boundary. El contrato del
+  // componente es fallar en silencio: sin datos completos, no se pinta.
+  if (!quote.breakdown || !quote.band) return null;
 
   return (
     <View style={[styles.card, { backgroundColor: alpha(colors.secondary, 0.08), borderColor: alpha(colors.secondary, 0.25) }]}>
