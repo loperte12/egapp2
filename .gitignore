@@ -73,3 +73,8 @@ egrouteplan-app/
 # ---------------------------------------------------------------------------
 _respaldo-*/
 dist-*/
+
+# Credenciales locales (Neon/R2/etc): NUNCA en el repo.
+.env
+.env.*
+.neon
