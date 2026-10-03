@@ -9,6 +9,8 @@
   ],
   "routes": [
     { "src": "/wallet/api/(.*)", "dest": "https://egapp-api.vercel.app/wallet/api/$1" },
+    { "src": "/lb-images/(.*)", "dest": "https://egapp-api.vercel.app/wallet/api/v1/media-legacy/lb-images/$1" },
+    { "src": "/storage/(.*)", "dest": "https://egapp-api.vercel.app/wallet/api/v1/media-legacy/storage/$1" },
     { "src": "/maps/(.*)", "dest": "https://hk.egrouteplan.com/maps/$1" },
     { "src": "/routing/(.*)", "dest": "https://hk.egrouteplan.com/routing/$1" },
     { "handle": "filesystem" },
